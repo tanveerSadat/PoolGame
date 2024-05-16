@@ -1,0 +1,389 @@
+<html>
+<head>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.3/jquery.min.js"></script>
+    <title>Pool Game</title>
+
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+    
+        body {
+            font-family: Arial, sans-serif;
+        }
+    
+        #players {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background-color: #f0f0f0;
+            width: 100%;
+            box-sizing: border-box;
+        }
+    
+        #players p {
+            margin: 0;
+            padding: 5px 10px;
+            font-size: 16px;
+            color: #333;
+        }
+    
+        #player1Name {
+            margin-left: 20px;
+        }
+    
+        #player2Name {
+            margin-right: 20px;
+        }
+    
+        svg#poolTable {
+            display: block;
+            margin: 20px auto;
+        }
+    </style>
+
+    <!-- Script for tracking mouse coordinates -->
+    <script>
+        var track = true;
+        var isDragging = false;
+        var cueBallElement;
+        var offsetX, offsetY;
+        var lineElement;
+        var lineStartX, lineStartY;
+        var initialBallData;
+        var currentPlayer;
+        var assignBall = 0;
+        var player1Balls = [], player2Balls = [];
+
+        function trackon() {
+            track = true;
+            alert(track);
+        }
+
+        function trackit(event) {
+            if (track) {
+                console.log("Updated x:", event.clientX, " y:", event.clientY);
+            }
+            else {
+                console.error("Event object is undefined or null.");
+            }
+        }
+
+        function getCueBallPosition() {
+            var cueBalls = document.querySelectorAll('circle[fill="WHITE"]');
+            if (cueBalls.length > 0) {
+                var cueBall = cueBalls[0];
+                var cueBallPosition = {
+                    x: parseFloat((cueBall.getAttribute('cx') / 2.02) + 20),
+                    y: parseFloat((cueBall.getAttribute('cy') / 2.02) + 20)
+                };
+                console.log("Cue ball position:", cueBallPosition);
+            } else {
+                console.log("Couldn't find cue ball");
+            }
+        }
+
+        function startDrag(event) {
+            if (!isDragging) {
+                var target = event.target;
+                if (target.tagName.toLowerCase() === 'circle' && target.getAttribute('fill') === 'WHITE') {
+                    isDragging = true;
+                    cueBallElement = target;
+                    offsetX = (event.pageX) - parseFloat((cueBallElement.getAttribute('cx') / 2.02) + 20);
+                    offsetY = (event.pageY) - parseFloat((cueBallElement.getAttribute('cy') / 2.02) + 20);
+
+                    // Create a line element
+                    lineElement = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    lineStartX = parseFloat((cueBallElement.getAttribute('cx') / 2.02) + 20);
+                    lineStartY = parseFloat((cueBallElement.getAttribute('cy') / 2.02) + 20);
+                    lineElement.setAttribute('x1', lineStartX);
+                    lineElement.setAttribute('y1', lineStartY);
+                    lineElement.setAttribute('x2', lineStartX);
+                    lineElement.setAttribute('y2', lineStartY);
+                    lineElement.setAttribute('stroke', 'red');
+                    lineElement.setAttribute('stroke-width', '10');
+                    document.getElementById('poolTable').appendChild(lineElement);
+                    console.log("Initial Drag position:", lineStartX, lineStartY);
+
+                    document.addEventListener('mousemove', drag);
+                    document.addEventListener('mouseup', stopDrag);
+                }
+            }
+        }
+
+        function drag(event) {
+            if (isDragging) {
+                var x = (event.pageX) - offsetX;
+                var y = (event.pageY) - offsetY;
+
+                // Update the line's end position
+                lineElement.setAttribute('x2', x);
+                lineElement.setAttribute('y2', y);
+                //console.log("Dragging:", x, y);
+
+                // Calculate distance and angle
+                var distance = Math.sqrt(Math.pow(x - lineStartX, 2) + Math.pow(y - lineStartY, 2));
+                var angle = Math.atan2(y - lineStartY, x - lineStartX);
+
+                // Convert distance and angle to velocity components (adjusted factor to get high seeds)
+                var velocityX = -(distance * Math.cos(angle) * 10);
+                var velocityY = -(distance * Math.sin(angle) * 10);
+
+                // Limit maximum speed to 10000 mm/s
+                var currentSpeed = Math.sqrt(velocityX ** 2 + velocityY ** 2);
+                if (currentSpeed > 10000) {
+                    var scaleFactor = 10000 / currentSpeed;
+                    velocityX *= scaleFactor;
+                    velocityY *= scaleFactor;
+                }
+
+                var threshold = 0.08;
+
+                // if the angle is within the threshold around 0 or pi, set y velocity to 0
+                if ((angle > -threshold && angle < threshold) || (angle > Math.PI - threshold || angle < -Math.PI + threshold)) {
+                    velocityY = 0;
+                }
+
+                // if the angle is within the threshold around pi/2, set x velocity to 0
+                if ((angle > Math.PI / 2 - threshold && angle < Math.PI / 2 + threshold) || (angle > -Math.PI / 2 - threshold && angle < -Math.PI / 2 + threshold)) {
+                    velocityX = 0;
+                }
+
+                initialVelocity = { x: velocityX, y: velocityY };
+            }
+        }
+
+        function stopDrag(event) {
+            if (isDragging) {
+                isDragging = false;
+                cueBallElement = null;
+
+                // Remove the line element
+                if (lineElement) {
+                    document.getElementById('poolTable').removeChild(lineElement);
+                    lineElement = null;
+                }
+                console.log("Stop dragging");
+
+                document.removeEventListener('mousemove', drag);
+                document.removeEventListener('mouseup', stopDrag);
+
+                var ballData = getBallData();
+
+                sendPostRequest(initialVelocity, ballData);
+            }
+        }
+
+        function getBallData() {
+            var balls = document.querySelectorAll('circle');
+            var ballData = [];
+
+            balls.forEach(ball => {
+                var radius = parseFloat(ball.getAttribute('r'));
+                if (radius === 28) {
+                    var color = ball.getAttribute('fill');
+                    var x = parseFloat(ball.getAttribute('cx'));
+                    var y = parseFloat(ball.getAttribute('cy'));
+
+                    ballData.push({ color: color, x: x, y: y });
+                }
+            });
+
+            return ballData;
+        }
+
+        function sendPostRequest(velocity, ballData) {
+            var data = {
+                velocityX: velocity.x,
+                velocityY: velocity.y,
+                ballData: ballData
+            };
+
+            fetch('/PoolGame', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => {
+                if (response.ok) {
+                    console.log('Sent velocity and ballData:', velocity, ballData);
+                    return response.text(); // Parse the response as text
+                } else {
+                    console.error('Error sending velocity');
+                }
+            })
+            .then(svgData => {
+                // Split the response into individual SVG strings
+                var svgFrames = svgData.trim().split('<!-- hello -->');
+
+                var frameIndex = 0;
+
+                var currentFrameIndex = 0;
+                var animationInterval = setInterval(function() {
+                    if (frameIndex < svgFrames.length) {
+                        // replace the table SVG with the new one
+                        $("#poolTable").html(svgFrames[frameIndex]);
+                        frameIndex++;
+                    }
+                    else {
+                        clearInterval(animationInterval)
+                        // Determine sunk balls
+                        initialBallData = determineSunkBalls(initialBallData, getBallData());
+                    }
+                    
+                }, 1); // Change interval
+            })
+            .catch(error => console.error('Error sending POST request:', error));
+        }
+
+        function determineSunkBalls(initialState, currentState) {
+            // Define arrays for low balls and high balls colors
+            const lowBallColors = ["YELLOW", "BLUE", "RED", "PURPLE", "ORANGE", "GREEN", "BROWN"];
+            const highBallColors = ["LIGHTYELLOW", "LIGHTBLUE", "PINK", "MEDIUMPURPLE", "LIGHTSALMON", "LIGHTGREEN", "SANDYBROWN"];
+
+            // Find the balls that were sunk
+            var sunkBalls = initialState.filter(ball => !currentState.some(currentBall => ball.color === currentBall.color));
+
+            // Display the sunk balls to the user
+            var sunkBallNames = sunkBalls.map(ball => ball.color);
+            // alert('Sunk balls: ' + sunkBallNames.join(', '));
+
+            // Classify sunken balls into high or low balls
+            var highBalls = sunkBalls.filter(ball => highBallColors.includes(ball.color));
+            var lowBalls = sunkBalls.filter(ball => lowBallColors.includes(ball.color));
+
+            // Remove the sunk balls from the initial state
+            initialState = initialState.filter(ball => !sunkBalls.some(sunkBall => ball.color === sunkBall.color));
+
+            if (assignBall == 0){
+                if (sunkBallNames.length > 0){
+                    if (currentPlayer == 'Player 1'){
+                        if (highBalls.length > 0){
+                            player1Balls = highBallColors;
+                            alert('Player 1 gets high balls. Player 2 gets low balls.');
+                        }
+                        else {
+                            player1Balls = lowBallColors;
+                            alert('Player 1 gets low balls. Player 2 gets high balls.');
+                        }
+                    }
+                    if (currentPlayer == 'Player 2'){
+                        if (highBalls.length > 0){
+                            player2Balls = highBallColors;
+                            alert('Player 2 gets high balls. Player 1 gets low balls.');
+                        }
+                        else {
+                            player2Balls = lowBallColors;
+                            alert('Player 2 gets low balls. Player 1 gets high balls.');
+                        }
+                    }
+                    assignBall = 1;
+                }
+            }
+
+            // Remove sunken balls from player balls
+            if (assignBall == 1){
+                player1Balls = player1Balls.filter(ballColor => !sunkBallNames.includes(ballColor));
+                player2Balls = player2Balls.filter(ballColor => !sunkBallNames.includes(ballColor));
+
+                // Check if game is over
+                gameEnd(sunkBallNames);
+
+            }
+
+            turn(sunkBallNames);
+            // Return the updated initial state
+            return initialState;
+        }
+
+        function gameEnd(sunkBallNames) {
+            if (sunkBallNames.includes('BLACK')) {
+                if (currentPlayer == 'Player 1'){
+                    if (player1Balls.length == 0){
+                        alert('Player 1 Wins');
+                    }
+                    if (player1Balls.length > 0){
+                        alert('Player 1 sunk the black ball too early, Player 2 Wins');
+                    }
+                }
+                if (currentPlayer == 'Player 2'){
+                    if (player2Balls.length == 0){
+                        alert('Player 2 Wins');
+                    }
+                    if (player2Balls.length > 0){
+                        alert('Player 2 sunk the black ball too early, Player 1 Wins');
+                    }
+                }
+            }
+        }
+
+        function turn(sunkBallNames) {
+            // Check if any of the sunk balls belong to player1Balls
+            var player1BallsSunk = sunkBallNames.some(ballColor => player1Balls.includes(ballColor));
+            var player2BallsSunk = sunkBallNames.some(ballColor => player2Balls.includes(ballColor));
+
+            // If player 1 sunk one of their balls, it's still their turn
+            if (currentPlayer == 'Player 1'){
+                if (player1BallsSunk.length > 0){
+                    currentPlayer = 'Player 1';
+                }
+                if (player1BallsSunk.length == 0) {
+                    currentPlayer = 'Player 2';
+                }
+            }
+            if (currentPlayer == 'Player 2'){
+                if (player2BallsSunk.length > 0){
+                    currentPlayer = 'Player 2';
+                }
+                if (player2BallsSunk.length < 0) {
+                    currentPlayer = 'Player 1';
+                }
+            }
+
+            if (sunkBallNames.length == 0){
+                if (currentPlayer == 'Player 1'){
+                    currentPlayer = 'Player 2';
+                }
+                else {
+                    currentPlayer = 'Player 1';
+                }
+            }
+
+            // Output whose turn it is
+            alert("It's " + currentPlayer + "'s turn.");
+        }
+
+        function randomizePlayer() {
+            var players = ['Player 1', 'Player 2'];
+            var firstPlayer = players[Math.floor(Math.random() * players.length)];
+            alert(firstPlayer + " goes first!");
+
+             // Store initial state of balls
+             initialBallData = getBallData();
+             currentPlayer = firstPlayer;
+        }
+
+    </script>
+</head>
+
+<body onload="randomizePlayer()">
+<div id="player 1">
+    <p>Player 1: Tanveer </p>
+</div>
+<svg id="poolTable" width="700" height="1370" xmlns="http://www.w3.org/2000/svg" 
+xmlns:xlink="http://www.w3.org/1999/xlink"
+onmousedown="startDrag(event);">
+    <!-- SVG content will be dynamically loaded here -->
+</svg>
+<div id="player 2">
+    <p>Player 2: Sadat</p>
+</div> 
+</body>
+</html>

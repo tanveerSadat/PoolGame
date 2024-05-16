@@ -1,0 +1,100 @@
+<html>
+    <head>
+        <title>8 Ball Game</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                text-align: center;
+                margin: 0;
+                padding: 0;
+            }
+            h1 {
+                margin-top: 50px;
+            }
+            .container {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 80vh;
+            }
+            .player-input {
+                margin-bottom: 20px;
+            }
+            .start-button {
+                padding: 10px 20px;
+                font-size: 16px;
+                cursor: pointer;
+                background-color: dodgerblue;
+                color: #fff;
+                border: none;
+                border-radius: 5px;
+                transition: background-color 0.3s;
+            }
+            .start-button:hover {
+                background-color: #4CAF50;
+            }
+        </style>
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                document.getElementById("players-form").addEventListener("submit", function(event) {
+                    event.preventDefault(); // Prevent form submission
+        
+                    // Get player names
+                    var player1Name = document.getElementById("player1").value;
+                    var player2Name = document.getElementById("player2").value;
+        
+                    // Randomly assign high and low balls to players
+                    var highPlayer, lowPlayer;
+                    var randomNumber = Math.random(); // Generate random number between 0 and 1
+        
+                    if (randomNumber < 0.5) {
+                        highPlayer = player1Name;
+                        lowPlayer = player2Name;
+                    } else {
+                        highPlayer = player2Name;
+                        lowPlayer = player1Name;
+                    }
+        
+                    // Create a new POST request with XMLHttpRequest
+                    var xhr = new XMLHttpRequest();
+                    var url = "/StartGame"; // URL to send the POST request
+                    xhr.open("POST", url, true);
+        
+                    // Set the content type header to indicate JSON data
+                    xhr.setRequestHeader("Content-Type", "application/json");
+        
+                    // Create an object with the data to send
+                    var postData = {
+                        player1: player1Name,
+                        player2: player2Name,
+                    };
+        
+                    // Convert the data to JSON format
+                    var jsonData = JSON.stringify(postData);
+        
+                    // Send the POST request with the JSON data
+                    xhr.send(jsonData);
+                
+                    // Redirect to the game page
+                    window.location.href = "/PoolGame";
+                });
+            });
+        </script>
+    </head>
+    <body>
+        <h1>8 Ball Game</h1>
+        <div class="container">
+            <form id="players-form">
+                <div class="player-input">
+                    <label for="player1">Player 1 Name:</label>
+                    <input type="text" id="player1" name="player1" required>
+                </div>
+                <div class="player-input">
+                    <label for="player2">Player 2 Name:</label>
+                    <input type="text" id="player2" name="player2" required>
+                </div>
+                <button type="submit" class="start-button">Start Game</button>
+            </form>
+        </div>
+    </body>
+</html>
